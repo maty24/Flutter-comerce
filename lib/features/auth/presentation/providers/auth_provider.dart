@@ -3,18 +3,38 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:teslo_shop/features/auth/domain/domain.dart';
 import 'package:teslo_shop/features/auth/infrastructure/errors/auth_errors.dart';
 import 'package:teslo_shop/features/auth/infrastructure/repositories/auth_repository_impl.dart';
+import 'package:teslo_shop/features/shared/infrastructure/service/key_value_impl.dart';
 
+import '../../../shared/infrastructure/service/key_value_storage.dart';
+
+////////////////////3333//////////////////////
+////////////////////3333//////////////////////
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   //aqui tengo los datos del repositorio o caso de uso
   final authRepository = AuthRepositoryImpl();
+  //aqui tengo los datos del servicio
+  final keyValueStorageService = KeyValueStorageServiceImpl();
 
-  return AuthNotifier(authRepository: authRepository);
+  return AuthNotifier(
+    authRepository: authRepository,
+    keyValueStorageService: keyValueStorageService,
+  );
 });
 
+/////////////////////////////////222222222//////////////////////////////
+/////////////////////////////////222222222//////////////////////////////
 class AuthNotifier extends StateNotifier<AuthState> {
   final AuthRepository authRepository;
+  //aca le mando el servicio
+  final KeyValueStorageService keyValueStorageService;
 
-  AuthNotifier({required this.authRepository}) : super(AuthState());
+  AuthNotifier({
+    required this.keyValueStorageService,
+    required this.authRepository,
+  }) : super(AuthState()) {
+    //aca se ejecuta el constructor y se ejecuta la funcion
+    checkAuthStatus();
+  }
 
   Future<void> loginUser(String email, String password) async {
     await Future.delayed(const Duration(milliseconds: 500));
@@ -34,18 +54,37 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   void registerUser(String email, String password) async {}
 
-  void checkAuthStatus() async {}
+  void checkAuthStatus() async {
+    //aca voy a buscar el token
+    final token = await keyValueStorageService.getValue<String>('token');
+    if (token == null) return;
+
+    try {
+      //aca voy a buscar el usuario
+      final user = await authRepository.checkAuthStatus(token);
+      //le envio el usuario
+      _setLoggerUser(user);
+    } catch (e) {
+      logout();
+    }
+  }
 
   //esta funcion solo va tener el token
-  void _setLoggerUser(User user) {
+  void _setLoggerUser(User user) async {
+    //aca guardo el token
+    await keyValueStorageService.setKetValue('token', user.token);
+
     //necesito guradar el token fisicamente
     state = state.copyWith(
       user: user,
       authStatus: AuthStatus.authenticated,
+      errorMessage: '',
     );
   }
 
   Future<void> logout([String? errorMessage]) async {
+    //remuevo el token
+    await keyValueStorageService.removeKey('token');
     // TODO: limpiar token
     state = state.copyWith(
         authStatus: AuthStatus.notAuthenticated,
@@ -54,6 +93,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 }
 
+//////////////////1111//////////////////////
+//////////////////1111//////////////////////
 enum AuthStatus { checking, authenticated, notAuthenticated }
 
 class AuthState {
